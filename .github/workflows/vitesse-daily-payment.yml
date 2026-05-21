@@ -3,7 +3,7 @@ name: Vitesse stochastic staging payments
 on:
   schedule:
     - cron: "25 12 21 5 *" # demo-robot-next-claim
-    - cron: "*/5 * * * *" # demo-robot-safety-net
+    - cron: "2-59/5 * * * *" # demo-robot-safety-net
   push:
     paths:
       - payment-trigger.txt
