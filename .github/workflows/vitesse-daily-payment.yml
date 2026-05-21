@@ -2,7 +2,7 @@ name: Vitesse daily staging payment
 
 on:
   schedule:
-    - cron: "0 12 * * *"
+    - cron: "14 11 * * *"
   push:
     paths:
       - payment-trigger.txt
