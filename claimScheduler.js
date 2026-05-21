@@ -69,16 +69,18 @@ function scheduleNextClaim(env = process.env, now = new Date()) {
   const delaySeconds = samplePoissonDelaySeconds(meanMinutes);
   const nextClaimAt = roundUpToMinute(new Date(now.getTime() + delaySeconds * 1000));
   const cron = cronForDate(nextClaimAt);
+  const shouldUpdateWorkflow = env.UPDATE_WORKFLOW_CRON !== "false";
   const state = {
     nextClaimAt: nextClaimAt.toISOString(),
     cron,
     meanMinutes,
     sampledDelaySeconds: delaySeconds,
-    scheduledAt: now.toISOString()
+    scheduledAt: now.toISOString(),
+    workflowCronUpdated: shouldUpdateWorkflow
   };
 
   writeScheduleState(state, env.CLAIM_SCHEDULE_FILE || DEFAULT_STATE_FILE);
-  updateWorkflowCron(cron, env.WORKFLOW_FILE || DEFAULT_WORKFLOW_FILE);
+  if (shouldUpdateWorkflow) updateWorkflowCron(cron, env.WORKFLOW_FILE || DEFAULT_WORKFLOW_FILE);
   return state;
 }
 

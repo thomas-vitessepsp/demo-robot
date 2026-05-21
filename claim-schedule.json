@@ -1,7 +1,8 @@
 {
-  "nextClaimAt": "2026-05-21T12:25:00.000Z",
-  "cron": "25 12 21 5 *",
+  "nextClaimAt": "2026-05-21T12:34:00.000Z",
+  "cron": "34 12 21 5 *",
   "meanMinutes": 5,
-  "sampledDelaySeconds": 207,
-  "scheduledAt": "2026-05-21T12:20:51.229Z"
+  "sampledDelaySeconds": 244,
+  "scheduledAt": "2026-05-21T12:29:27.970Z",
+  "workflowCronUpdated": true
 }

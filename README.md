@@ -34,6 +34,8 @@ Create this repository secret:
 VITESSE_API_TOKEN
 ```
 
+Optional: create `GH_WORKFLOW_TOKEN` as a fine-grained GitHub token or classic PAT that can write repository contents and workflow files. If it is present, the robot updates the workflow cron after each claim. If it is absent, the robot still works from the five-minute safety-net cron and `claim-schedule.json`.
+
 Optional for testing: create a repository variable named `DRY_RUN` and set it to `true`.
 
 ## Local Test
