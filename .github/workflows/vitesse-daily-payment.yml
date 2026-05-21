@@ -4,6 +4,18 @@ on:
   schedule:
     - cron: "0 12 * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Generate payload without calling the Vitesse API"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: write
 
 jobs:
   create-payment:
@@ -20,7 +32,7 @@ jobs:
       AMOUNT_AVG: "1000"
       AMOUNT_STD_DEV: "200"
       AMOUNT_CAP_MULTIPLIER: "5"
-      DRY_RUN: ${{ vars.DRY_RUN || 'false' }}
+      DRY_RUN: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'false' }}
 
     steps:
       - name: Check out repository
@@ -41,3 +53,16 @@ jobs:
 
       - name: Create staging payment
         run: node index.js
+
+      - name: Commit updated payment counter
+        if: ${{ success() && env.DRY_RUN != 'true' }}
+        run: |
+          if git diff --quiet -- payment-counter.json; then
+            echo "Payment counter unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add payment-counter.json
+          git commit -m "Advance payment counter"
+          git push

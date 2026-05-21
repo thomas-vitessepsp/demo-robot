@@ -1,6 +1,10 @@
 "use strict";
 
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+
+const COUNTER_FILE = path.join(__dirname, "payment-counter.json");
 
 const DEFAULT_CONFIG = {
   apiBaseUrl: "https://staging-api.vitessepsp.com",
@@ -11,38 +15,12 @@ const DEFAULT_CONFIG = {
   routeType: "BankAccount",
   averageAmount: 1000,
   standardDeviation: 200,
-  capMultiplier: 5
+  capMultiplier: 5,
+  counterFile: COUNTER_FILE
 };
 
-const FIRST_NAMES = [
-  "Aarav",
-  "Vivaan",
-  "Aditya",
-  "Arjun",
-  "Ishaan",
-  "Rohan",
-  "Priya",
-  "Ananya",
-  "Meera",
-  "Kavya",
-  "Neha",
-  "Riya"
-];
-
-const LAST_NAMES = [
-  "Sharma",
-  "Patel",
-  "Iyer",
-  "Nair",
-  "Reddy",
-  "Gupta",
-  "Mehta",
-  "Rao",
-  "Khan",
-  "Singh",
-  "Menon",
-  "Das"
-];
+const FIRST_NAMES = ["Aarav", "Vivaan", "Aditya", "Arjun", "Ishaan", "Rohan", "Priya", "Ananya", "Meera", "Kavya", "Neha", "Riya"];
+const LAST_NAMES = ["Sharma", "Patel", "Iyer", "Nair", "Reddy", "Gupta", "Mehta", "Rao", "Khan", "Singh", "Menon", "Das"];
 
 const ADDRESS_BOOK = [
   { line: "14 MG Road", city: "Bengaluru", state: "Karnataka", pin: "560001" },
@@ -64,21 +42,21 @@ const BANKS = [
 ];
 
 const CLAIM_TYPES = [
-  { purpose: "Motor repair settlement", reference: "Claimant repair settlement", code: "REPAIR" },
-  { purpose: "Cashless garage settlement", reference: "Garage repair settlement", code: "GARAGE" },
-  { purpose: "Windscreen claim settlement", reference: "Windscreen replacement claim", code: "GLASS" },
-  { purpose: "Towing reimbursement", reference: "Roadside towing reimbursement", code: "TOWING" },
-  { purpose: "Third party liability settlement", reference: "Third party motor claim", code: "TPL" },
-  { purpose: "Total loss settlement", reference: "Total loss motor settlement", code: "TOTAL" },
-  { purpose: "Vehicle theft claim settlement", reference: "Theft claim settlement", code: "THEFT" },
-  { purpose: "Personal accident benefit", reference: "PA cover claim settlement", code: "PA" }
+  { purpose: "Motor repair settlement", code: "REPAIR" },
+  { purpose: "Cashless garage settlement", code: "GARAGE" },
+  { purpose: "Windscreen claim settlement", code: "GLASS" },
+  { purpose: "Towing reimbursement", code: "TOWING" },
+  { purpose: "Third party liability settlement", code: "TPL" },
+  { purpose: "Total loss settlement", code: "TOTAL" },
+  { purpose: "Vehicle theft claim settlement", code: "THEFT" },
+  { purpose: "Personal accident benefit", code: "PA" }
 ];
 
 function getConfig(env = process.env) {
   return {
     ...DEFAULT_CONFIG,
     apiBaseUrl: env.VITESSE_API_BASE_URL || DEFAULT_CONFIG.apiBaseUrl,
-    apiToken: env.VITESSE_API_TOKEN,
+    apiToken: normalizeBearerToken(env.VITESSE_API_TOKEN),
     sendAccountId: parseInteger(env.SEND_ACCOUNT_ID, DEFAULT_CONFIG.sendAccountId),
     sendCurrency: env.SEND_CURRENCY || DEFAULT_CONFIG.sendCurrency,
     recipientCountry: env.RECIPIENT_COUNTRY || DEFAULT_CONFIG.recipientCountry,
@@ -87,8 +65,14 @@ function getConfig(env = process.env) {
     averageAmount: parseNumber(env.AMOUNT_AVG, DEFAULT_CONFIG.averageAmount),
     standardDeviation: parseNumber(env.AMOUNT_STD_DEV, DEFAULT_CONFIG.standardDeviation),
     capMultiplier: parseNumber(env.AMOUNT_CAP_MULTIPLIER, DEFAULT_CONFIG.capMultiplier),
+    counterFile: env.PAYMENT_COUNTER_FILE || DEFAULT_CONFIG.counterFile,
     dryRun: env.DRY_RUN === "true"
   };
+}
+
+function normalizeBearerToken(token) {
+  if (!token) return token;
+  return token.trim().replace(/^Bearer\s+/i, "");
 }
 
 function parseInteger(value, fallback) {
@@ -107,59 +91,58 @@ function randomItem(items) {
 
 function randomDigits(length) {
   let value = "";
-  for (let index = 0; index < length; index += 1) {
-    value += crypto.randomInt(0, 10).toString();
-  }
+  for (let index = 0; index < length; index += 1) value += crypto.randomInt(0, 10).toString();
   return value;
 }
 
 function randomAlphaNumeric(length) {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let value = "";
-  for (let index = 0; index < length; index += 1) {
-    value += chars[crypto.randomInt(0, chars.length)];
-  }
+  for (let index = 0; index < length; index += 1) value += chars[crypto.randomInt(0, chars.length)];
   return value;
+}
+
+function makeReference(prefix) {
+  const value = `${prefix}${randomAlphaNumeric(7)}`;
+  assertReference(value, `${prefix} reference`);
+  return value;
+}
+
+function assertReference(value, label) {
+  if (!/^[A-Z0-9]{8}$/.test(value)) throw new Error(`${label} must be exactly 8 uppercase alphanumeric characters.`);
+}
+
+function readPaymentReference(counterFile) {
+  if (!fs.existsSync(counterFile)) return "00001500";
+
+  const parsed = JSON.parse(fs.readFileSync(counterFile, "utf8"));
+  const reference = String(parsed.nextPaymentReference || "").trim();
+  if (!/^\d{8}$/.test(reference)) throw new Error(`Invalid nextPaymentReference in ${counterFile}. Expected an 8 digit string.`);
+  return reference;
+}
+
+function nextPaymentReference(reference) {
+  const next = Number.parseInt(reference, 10) + 1;
+  if (!Number.isSafeInteger(next) || next > 99999999) throw new Error("Payment reference counter exceeded 99999999.");
+  return next.toString().padStart(8, "0");
+}
+
+function writePaymentReference(counterFile, reference) {
+  fs.writeFileSync(counterFile, `${JSON.stringify({ nextPaymentReference: reference }, null, 2)}\n`, "utf8");
 }
 
 function randomNormal(mean, standardDeviation) {
   let first = 0;
   let second = 0;
-
   while (first === 0) first = crypto.randomInt(1, 1_000_000) / 1_000_000;
   while (second === 0) second = crypto.randomInt(1, 1_000_000) / 1_000_000;
-
-  const standardNormal =
-    Math.sqrt(-2.0 * Math.log(first)) * Math.cos(2.0 * Math.PI * second);
-
-  return mean + standardNormal * standardDeviation;
+  return mean + Math.sqrt(-2 * Math.log(first)) * Math.cos(2 * Math.PI * second) * standardDeviation;
 }
 
 function generateAmount(config) {
   const cap = config.averageAmount * config.capMultiplier;
   const sampled = randomNormal(config.averageAmount, config.standardDeviation);
-  const bounded = Math.max(1, Math.min(cap, sampled));
-
-  return Math.round(bounded * 100) / 100;
-}
-
-function compactDate(date = new Date()) {
-  return date.toISOString().slice(0, 10).replace(/-/g, "");
-}
-
-function generateInsuranceContext(date = new Date()) {
-  const claimType = randomItem(CLAIM_TYPES);
-  const dayCode = compactDate(date);
-  const claimNumber = `${claimType.code}-${dayCode}-${randomAlphaNumeric(6)}`;
-  const policyNumber = `POL-IN-${dayCode.slice(2)}-${randomDigits(5)}`;
-  const invoiceNumber = `INV-${claimType.code}-${randomDigits(6)}`;
-
-  return {
-    claimType,
-    claimNumber,
-    policyNumber,
-    invoiceNumber
-  };
+  return Math.round(Math.max(1, Math.min(cap, sampled)) * 100) / 100;
 }
 
 function generateRecipient() {
@@ -180,8 +163,9 @@ function generateRecipient() {
   };
 }
 
-function buildPaymentRequest(config = getConfig(), date = new Date()) {
-  const insurance = generateInsuranceContext(date);
+function buildPaymentRequest(config = getConfig(), paymentReference = readPaymentReference(config.counterFile)) {
+  assertReference(paymentReference, "Payment reference");
+  const claimType = randomItem(CLAIM_TYPES);
   const recipient = generateRecipient();
 
   return {
@@ -190,16 +174,16 @@ function buildPaymentRequest(config = getConfig(), date = new Date()) {
       Name: recipient.name,
       Country: config.recipientCountry,
       Currency: config.recipientCurrency,
-      RecipientReference: `${insurance.claimType.reference} ${insurance.claimNumber}`,
+      RecipientReference: paymentReference,
       Address: recipient.address,
       Account: {
         ...recipient.account,
-        PaymentPurpose: `${insurance.claimType.purpose} ${insurance.claimNumber}`
+        PaymentPurpose: `${claimType.purpose} ${paymentReference}`
       }
     },
-    ExternalReference1: insurance.claimNumber,
-    ExternalReference2: insurance.policyNumber,
-    ExternalReference3: insurance.invoiceNumber,
+    ExternalReference1: paymentReference,
+    ExternalReference2: makeReference("P"),
+    ExternalReference3: makeReference("I"),
     SendAccountId: config.sendAccountId,
     SendCurrency: config.sendCurrency,
     SendValue: generateAmount(config),
@@ -211,13 +195,8 @@ async function requestJson(url, options) {
   const response = await fetch(url, options);
   const text = await response.text();
   let body = text;
-
   if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = text;
-    }
+    try { body = JSON.parse(text); } catch { body = text; }
   }
 
   if (!response.ok) {
@@ -227,33 +206,23 @@ async function requestJson(url, options) {
     throw error;
   }
 
-  return {
-    status: response.status,
-    statusText: response.statusText,
-    body
-  };
+  return { status: response.status, statusText: response.statusText, body };
 }
 
 async function getRules(config) {
-  const url = new URL(
-    `/api/rules/${config.recipientCountry}/${config.recipientCurrency}`,
-    config.apiBaseUrl
-  );
+  const url = new URL(`/api/rules/${config.recipientCountry}/${config.recipientCurrency}`, config.apiBaseUrl);
   url.searchParams.set("accountId", String(config.sendAccountId));
 
   const result = await requestJson(url, {
     method: "GET",
-    headers: {
-      accept: "application/json",
-      Authorization: `Bearer ${config.apiToken}`
-    }
+    headers: { accept: "application/json", Authorization: `Bearer ${config.apiToken}` }
   });
 
   return result.body;
 }
 
-function readPath(source, path) {
-  return path
+function readPath(source, rulePath) {
+  return rulePath
     .replace(/^request\./, "")
     .split(".")
     .reduce((value, key) => (value == null ? undefined : value[key]), source);
@@ -268,9 +237,7 @@ function validateRequiredRules(paymentRequest, rules) {
     })
     .map((rule) => `${rule.FieldName} (${rule.Path})`);
 
-  if (missing.length > 0) {
-    throw new Error(`Generated request is missing mandatory fields: ${missing.join(", ")}`);
-  }
+  if (missing.length > 0) throw new Error(`Generated request is missing mandatory fields: ${missing.join(", ")}`);
 }
 
 async function createTransactionRequest(paymentRequest, config) {
@@ -287,35 +254,29 @@ async function createTransactionRequest(paymentRequest, config) {
 
 async function runDailyPayment(env = process.env) {
   const config = getConfig(env);
-  const paymentRequest = buildPaymentRequest(config);
+  const paymentReference = readPaymentReference(config.counterFile);
+  const paymentRequest = buildPaymentRequest(config, paymentReference);
 
-  if (config.dryRun) {
-    return {
-      dryRun: true,
-      request: paymentRequest
-    };
-  }
-
-  if (!config.apiToken) {
-    throw new Error("Missing required environment variable VITESSE_API_TOKEN.");
-  }
+  if (config.dryRun) return { dryRun: true, nextPaymentReference: paymentReference, request: paymentRequest };
+  if (!config.apiToken) throw new Error("Missing required environment variable VITESSE_API_TOKEN.");
 
   const rules = await getRules(config);
   validateRequiredRules(paymentRequest, rules);
 
   const result = await createTransactionRequest(paymentRequest, config);
+  const nextReference = nextPaymentReference(paymentReference);
+  writePaymentReference(config.counterFile, nextReference);
 
-  return {
-    dryRun: false,
-    request: paymentRequest,
-    response: result.body
-  };
+  return { dryRun: false, paymentReference, nextPaymentReference: nextReference, request: paymentRequest, response: result.body };
 }
 
 module.exports = {
   buildPaymentRequest,
   generateAmount,
   getConfig,
+  normalizeBearerToken,
+  readPaymentReference,
   runDailyPayment,
-  validateRequiredRules
+  validateRequiredRules,
+  writePaymentReference
 };
