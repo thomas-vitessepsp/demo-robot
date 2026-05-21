@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       VITESSE_API_TOKEN: ${{ secrets.VITESSE_API_TOKEN }}
       VITESSE_API_BASE_URL: https://staging-api.vitessepsp.com
       SEND_ACCOUNT_ID: "1077"
@@ -28,11 +29,12 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Check configuration
         run: |
-          if [ -z "$VITESSE_API_TOKEN" ]; then
+          echo "DRY_RUN=$DRY_RUN"
+          if [ "$DRY_RUN" != "true" ] && [ -z "$VITESSE_API_TOKEN" ]; then
             echo "Missing GitHub secret: VITESSE_API_TOKEN"
             exit 1
           fi
