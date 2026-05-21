@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Daily Vitesse staging payment generator.
+
+Parameters:
+  VitesseApiToken:
+    Type: String
+    NoEcho: true
+    Description: Bearer token for the Vitesse staging API.
+  VitesseApiBaseUrl:
+    Type: String
+    Default: https://staging-api.vitessepsp.com
+  SendAccountId:
+    Type: Number
+    Default: 1077
+  SendCurrency:
+    Type: String
+    Default: INR
+  RecipientCountry:
+    Type: String
+    Default: IN
+  RecipientCurrency:
+    Type: String
+    Default: INR
+  AmountAverage:
+    Type: Number
+    Default: 1000
+  AmountStandardDeviation:
+    Type: Number
+    Default: 200
+  AmountCapMultiplier:
+    Type: Number
+    Default: 5
+  DryRun:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "true"
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+    MemorySize: 128
+
+Resources:
+  DailyPaymentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda.handler
+      Environment:
+        Variables:
+          VITESSE_API_TOKEN: !Ref VitesseApiToken
+          VITESSE_API_BASE_URL: !Ref VitesseApiBaseUrl
+          SEND_ACCOUNT_ID: !Ref SendAccountId
+          SEND_CURRENCY: !Ref SendCurrency
+          RECIPIENT_COUNTRY: !Ref RecipientCountry
+          RECIPIENT_CURRENCY: !Ref RecipientCurrency
+          AMOUNT_AVG: !Ref AmountAverage
+          AMOUNT_STD_DEV: !Ref AmountStandardDeviation
+          AMOUNT_CAP_MULTIPLIER: !Ref AmountCapMultiplier
+          DRY_RUN: !Ref DryRun
+      Events:
+        NoonGmtSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 12 * * ? *)
+            Enabled: true
+
+Outputs:
+  DailyPaymentFunctionArn:
+    Description: Lambda function ARN.
+    Value: !GetAtt DailyPaymentFunction.Arn

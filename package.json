@@ -1,0 +1,16 @@
+{
+  "name": "demo-robot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generate one fake Vitesse staging car-insurance payment per day.",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dry-run": "node -e \"process.env.DRY_RUN='true'; require('./index')\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
