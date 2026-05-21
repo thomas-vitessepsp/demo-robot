@@ -3,6 +3,9 @@ name: Vitesse daily staging payment
 on:
   schedule:
     - cron: "0 12 * * *"
+  push:
+    paths:
+      - payment-trigger.txt
   workflow_dispatch:
     inputs:
       dry_run:
