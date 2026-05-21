@@ -166,7 +166,8 @@ function generateRecipient() {
 function buildPaymentRequest(config = getConfig(), paymentReference = readPaymentReference(config.counterFile)) {
   assertReference(paymentReference, "Payment reference");
   const claimType = randomItem(CLAIM_TYPES);
-  const claimReference = makeReference("C");
+  const externalReference2 = makeReference("C");
+  const externalReference3 = claimType.reference;
   const recipient = generateRecipient();
 
   return {
@@ -175,7 +176,7 @@ function buildPaymentRequest(config = getConfig(), paymentReference = readPaymen
       Name: recipient.name,
       Country: config.recipientCountry,
       Currency: config.recipientCurrency,
-      RecipientReference: `${claimType.reference} ${claimReference}`,
+      RecipientReference: `${externalReference3} ${externalReference2}`,
       Address: recipient.address,
       Account: {
         ...recipient.account,
@@ -183,8 +184,8 @@ function buildPaymentRequest(config = getConfig(), paymentReference = readPaymen
       }
     },
     ExternalReference1: paymentReference,
-    ExternalReference2: makeReference("P"),
-    ExternalReference3: claimType.reference,
+    ExternalReference2: externalReference2,
+    ExternalReference3: externalReference3,
     SendAccountId: config.sendAccountId,
     SendCurrency: config.sendCurrency,
     SendValue: generateAmount(config),
