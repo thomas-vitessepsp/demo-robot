@@ -184,7 +184,7 @@ function buildPaymentRequest(config = getConfig(), paymentReference = readPaymen
     },
     ExternalReference1: paymentReference,
     ExternalReference2: makeReference("P"),
-    ExternalReference3: makeReference("I"),
+    ExternalReference3: claimType.reference,
     SendAccountId: config.sendAccountId,
     SendCurrency: config.sendCurrency,
     SendValue: generateAmount(config),
