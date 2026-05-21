@@ -42,14 +42,14 @@ const BANKS = [
 ];
 
 const CLAIM_TYPES = [
-  { purpose: "Motor repair settlement", code: "REPAIR" },
-  { purpose: "Cashless garage settlement", code: "GARAGE" },
-  { purpose: "Windscreen claim settlement", code: "GLASS" },
-  { purpose: "Towing reimbursement", code: "TOWING" },
-  { purpose: "Third party liability settlement", code: "TPL" },
-  { purpose: "Total loss settlement", code: "TOTAL" },
-  { purpose: "Vehicle theft claim settlement", code: "THEFT" },
-  { purpose: "Personal accident benefit", code: "PA" }
+  { purpose: "Motor repair settlement", reference: "Claimant repair settlement", code: "REPAIR" },
+  { purpose: "Cashless garage settlement", reference: "Garage repair settlement", code: "GARAGE" },
+  { purpose: "Windscreen claim settlement", reference: "Windscreen replacement claim", code: "GLASS" },
+  { purpose: "Towing reimbursement", reference: "Roadside towing reimbursement", code: "TOWING" },
+  { purpose: "Third party liability settlement", reference: "Third party motor claim", code: "TPL" },
+  { purpose: "Total loss settlement", reference: "Total loss motor settlement", code: "TOTAL" },
+  { purpose: "Vehicle theft claim settlement", reference: "Theft claim settlement", code: "THEFT" },
+  { purpose: "Personal accident benefit", reference: "PA cover claim settlement", code: "PA" }
 ];
 
 function getConfig(env = process.env) {
@@ -166,6 +166,7 @@ function generateRecipient() {
 function buildPaymentRequest(config = getConfig(), paymentReference = readPaymentReference(config.counterFile)) {
   assertReference(paymentReference, "Payment reference");
   const claimType = randomItem(CLAIM_TYPES);
+  const claimReference = makeReference("C");
   const recipient = generateRecipient();
 
   return {
@@ -174,7 +175,7 @@ function buildPaymentRequest(config = getConfig(), paymentReference = readPaymen
       Name: recipient.name,
       Country: config.recipientCountry,
       Currency: config.recipientCurrency,
-      RecipientReference: paymentReference,
+      RecipientReference: `${claimType.reference} ${claimReference}`,
       Address: recipient.address,
       Account: {
         ...recipient.account,
