@@ -7,6 +7,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "worker": "node claimWorker.js",
     "dry-run": "node -e \"process.env.DRY_RUN='true'; require('./index')\"",
     "check-due": "node claimScheduler.js gate",
     "schedule-next": "node claimScheduler.js schedule"
