@@ -1,8 +1,9 @@
-name: Vitesse daily staging payment
+name: Vitesse stochastic staging payments
 
 on:
   schedule:
-    - cron: "0 12 * * *"
+    - cron: "25 12 21 5 *" # demo-robot-next-claim
+    - cron: "*/5 * * * *" # demo-robot-safety-net
   push:
     paths:
       - payment-trigger.txt
@@ -20,6 +21,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: vitesse-stochastic-payment
+  cancel-in-progress: false
+
 jobs:
   create-payment:
     runs-on: ubuntu-latest
@@ -35,18 +40,29 @@ jobs:
       AMOUNT_AVG: "1000"
       AMOUNT_STD_DEV: "200"
       AMOUNT_CAP_MULTIPLIER: "5"
+      CLAIM_MEAN_MINUTES: "5"
       DRY_RUN: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'false' }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "24"
 
+      - name: Refresh branch state
+        run: git pull --rebase origin "$GITHUB_REF_NAME"
+
+      - name: Check claim due
+        id: due
+        run: node claimScheduler.js gate
+
       - name: Check configuration
+        if: ${{ steps.due.outputs.should_run == 'true' }}
         run: |
           echo "DRY_RUN=$DRY_RUN"
           if [ "$DRY_RUN" != "true" ] && [ -z "$VITESSE_API_TOKEN" ]; then
@@ -55,24 +71,22 @@ jobs:
           fi
 
       - name: Create staging payment
+        if: ${{ steps.due.outputs.should_run == 'true' }}
         run: node index.js
 
-      - name: Commit updated payment counter
-        if: ${{ success() && env.DRY_RUN != 'true' }}
+      - name: Schedule next claim
+        if: ${{ success() && steps.due.outputs.should_run == 'true' && env.DRY_RUN != 'true' }}
+        run: node claimScheduler.js schedule
+
+      - name: Commit updated payment state
+        if: ${{ success() && steps.due.outputs.should_run == 'true' && env.DRY_RUN != 'true' }}
         run: |
-          if git diff --quiet -- payment-counter.json; then
-            echo "Payment counter unchanged"
+          if git diff --quiet -- payment-counter.json claim-schedule.json .github/workflows/vitesse-daily-payment.yml; then
+            echo "Payment state unchanged"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add payment-counter.json
-          git commit -m "Advance payment counter"
-          for attempt in 1 2 3; do
-            if git push; then
-              exit 0
-            fi
-            echo "Push failed on attempt $attempt; rebasing on latest main before retrying"
-            git pull --rebase origin "$GITHUB_REF_NAME"
-          done
-          exit 1
+          git add payment-counter.json claim-schedule.json .github/workflows/vitesse-daily-payment.yml
+          git commit -m "Advance payment counter and schedule next claim"
+          git push

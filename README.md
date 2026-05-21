@@ -10,7 +10,7 @@ GitHub requires workflow files to live under `.github/workflows`. Because you as
 vitesse-daily-payment.yml
 ```
 
-To enable the daily schedule in GitHub:
+To enable the stochastic schedule in GitHub:
 
 1. Upload all files in this folder to your GitHub repo root.
 2. In GitHub, go to **Actions**.
@@ -57,9 +57,24 @@ $env:VITESSE_API_TOKEN = "your-token"
 node index.js
 ```
 
+## Stochastic Claim Timing
+
+The GitHub workflow no longer runs just once per day. It models claim arrivals as a Poisson process with an average arrival rate of one claim every five minutes.
+
+After each successful claim payment:
+
+1. `claimScheduler.js` samples the next inter-arrival time from an exponential distribution.
+2. It writes the next due time to `claim-schedule.json`.
+3. It updates the workflow cron line marked `# demo-robot-next-claim`.
+4. The workflow commits `payment-counter.json`, `claim-schedule.json`, and the updated workflow file back to GitHub.
+
+The workflow also has a five-minute safety-net cron. If GitHub misses or delays the exact dynamic cron minute, the safety-net run checks `claim-schedule.json` and only creates a payment when the sampled due time has arrived.
+
+You can change the average frequency by editing `CLAIM_MEAN_MINUTES` in `.github/workflows/vitesse-daily-payment.yml`.
+
 ## What It Does
 
-- Creates one fake `IN/INR` car-insurance payment from send account `1077`.
+- Creates fake `IN/INR` car-insurance payments from send account `1077`.
 - Uses `https://staging-api.vitessepsp.com` by default.
 - Generates names, Indian addresses, bank details, claim references, policy references, invoice references, payment purpose, and recipient reference.
 - Samples the payment amount from a normal distribution with average `1000`, standard deviation `200`, and cap `5000`.
