@@ -1,83 +1,76 @@
-# Demo Robot Flat Package
+# Demo Robot
 
-This is the root-only version of Demo Robot. All files are in this folder so you can upload them to GitHub without creating source-code subfolders.
+Demo Robot generates fake Vitesse staging car-insurance payments for `IN/INR` from send account `1077`.
 
-## Important GitHub Actions Note
+The stochastic model now runs inside a long-lived Node worker, not through GitHub cron. GitHub Actions is kept as a manual fallback for creating one payment on demand.
 
-GitHub requires workflow files to live under `.github/workflows`. Because you asked for all files in the root, the workflow is provided here as:
+## Stochastic Worker
 
-```text
-vitesse-daily-payment.yml
-```
+`claimWorker.js` runs continuously:
 
-To enable the stochastic schedule in GitHub:
+1. Samples the next inter-arrival delay from a Poisson process, implemented as an exponential wait time.
+2. Waits for that sampled delay.
+3. Creates one staging payment.
+4. Increments `payment-counter.json`.
+5. Samples again and repeats.
 
-1. Upload all files in this folder to your GitHub repo root.
-2. In GitHub, go to **Actions**.
-3. If GitHub offers **set up a workflow yourself**, choose that.
-4. Paste the contents of `vitesse-daily-payment.yml`.
-5. Save it as:
+Default frequency is one claim every five minutes on average.
 
-```text
-.github/workflows/vitesse-daily-payment.yml
-```
+## Required Secrets
 
-GitHub will create the required folders for you.
-
-## Secret Setup
-
-In GitHub, open **Settings** > **Secrets and variables** > **Actions**.
-
-Create this repository secret:
+Set this environment variable in your cloud worker:
 
 ```text
-VITESSE_API_TOKEN
+VITESSE_API_TOKEN=your-token
 ```
 
-Optional: create `GH_WORKFLOW_TOKEN` as a fine-grained GitHub token or classic PAT that can write repository contents and workflow files. If it is present, the robot updates the workflow cron after each claim. If it is absent, the robot still works from the five-minute safety-net cron and `claim-schedule.json`.
+## Useful Environment Variables
 
-Optional for testing: create a repository variable named `DRY_RUN` and set it to `true`.
+```text
+CLAIM_MEAN_MINUTES=5
+RUN_IMMEDIATELY=false
+RETRY_DELAY_SECONDS=60
+DRY_RUN=false
+ROBOT_ENABLED=true
+STOP_AFTER_CLAIMS=0
+STOP_FILE=/app/stop-worker.flag
+```
+
+## Stop Controls
+
+The worker can stop cleanly in four ways:
+
+- Set `ROBOT_ENABLED=false` and restart/redeploy the worker.
+- Set `STOP_AFTER_CLAIMS` to a positive number, for example `STOP_AFTER_CLAIMS=10`.
+- Create the file configured by `STOP_FILE`, defaulting to `/app/stop-worker.flag` in Docker.
+- Send `SIGINT` or `SIGTERM`; the worker wakes from sleep and exits gracefully.
 
 ## Local Test
 
-Install Node.js 18 or newer, then run:
+Dry-run one generated claim and stop:
 
 ```bash
-npm run dry-run
-```
-
-For a live local run:
-
-```bash
-VITESSE_API_TOKEN=your-token node index.js
+DRY_RUN=true RUN_IMMEDIATELY=true STOP_AFTER_CLAIMS=1 npm run worker
 ```
 
 On Windows PowerShell:
 
 ```powershell
-$env:VITESSE_API_TOKEN = "your-token"
-node index.js
+$env:DRY_RUN = "true"
+$env:RUN_IMMEDIATELY = "true"
+$env:STOP_AFTER_CLAIMS = "1"
+npm run worker
 ```
 
-## Stochastic Claim Timing
+## Docker
 
-The GitHub workflow no longer runs just once per day. It models claim arrivals as a Poisson process with an average arrival rate of one claim every five minutes.
+```bash
+docker build -t demo-robot .
+docker run --env VITESSE_API_TOKEN=your-token demo-robot
+```
 
-After each successful claim payment:
+For production, mount a small persistent disk over `/app` or set `PAYMENT_COUNTER_FILE` to a persistent path so `payment-counter.json` does not reset after redeploys.
 
-1. `claimScheduler.js` samples the next inter-arrival time from an exponential distribution.
-2. It writes the next due time to `claim-schedule.json`.
-3. It updates the workflow cron line marked `# demo-robot-next-claim`.
-4. The workflow commits `payment-counter.json`, `claim-schedule.json`, and the updated workflow file back to GitHub.
+## Manual GitHub Action
 
-The workflow also has a five-minute safety-net cron. If GitHub misses or delays the exact dynamic cron minute, the safety-net run checks `claim-schedule.json` and only creates a payment when the sampled due time has arrived.
-
-You can change the average frequency by editing `CLAIM_MEAN_MINUTES` in `.github/workflows/vitesse-daily-payment.yml`.
-
-## What It Does
-
-- Creates fake `IN/INR` car-insurance payments from send account `1077`.
-- Uses `https://staging-api.vitessepsp.com` by default.
-- Generates names, Indian addresses, bank details, claim references, policy references, invoice references, payment purpose, and recipient reference.
-- Samples the payment amount from a normal distribution with average `1000`, standard deviation `200`, and cap `5000`.
-- Reads the bearer token from `VITESSE_API_TOKEN`; it is not stored in code.
+The workflow `.github/workflows/vitesse-daily-payment.yml` is manual-only via `workflow_dispatch`. It creates one payment and commits the updated counter. It is not used for stochastic timing.
